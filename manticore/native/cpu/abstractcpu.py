@@ -530,6 +530,7 @@ class Cpu(Eventful):
         self._instruction_cache: Dict[int, Any] = {}
         self._icount = 0
         self._last_pc = None
+        self._last_executed_pc = None
         self._concrete = kwargs.pop("concrete", False)
         self.emu = None
         self._break_unicorn_at: Optional[int] = None
@@ -546,6 +547,7 @@ class Cpu(Eventful):
         state["memory"] = self._memory
         state["icount"] = self._icount
         state["last_pc"] = self._last_pc
+        state["last_executed_pc"] = self._last_executed_pc
         state["disassembler"] = self._disasm
         state["concrete"] = self._concrete
         state["break_unicorn_at"] = self._break_unicorn_at
@@ -562,6 +564,7 @@ class Cpu(Eventful):
         )
         self._icount = state["icount"]
         self._last_pc = state["last_pc"]
+        self._last_executed_pc = state["last_executed_pc"]
         self._disasm = state["disassembler"]
         self._concrete = state["concrete"]
         self._break_unicorn_at = state["break_unicorn_at"]
@@ -571,6 +574,14 @@ class Cpu(Eventful):
     @property
     def icount(self):
         return self._icount
+
+    @property
+    def last_executed_pc(self) -> int:
+        return self._last_executed_pc
+
+    @property
+    def last_executed_insn(self):
+        return self.decode_instruction(self.last_executed_pc)
 
     ##############################
     # Register access
@@ -985,6 +996,7 @@ class Cpu(Eventful):
         """
         curpc = self.PC
         if self._delayed_event:
+            self._last_executed_pc = self._last_pc
             self._icount += 1
             self._publish(
                 "did_execute_instruction",
@@ -1009,6 +1021,7 @@ class Cpu(Eventful):
         # FIXME (theo) why just return here?
         # hook changed PC, so we trust that there is nothing more to do
         if insn.address != self.PC:
+            self._last_executed_pc = self.PC
             return
 
         name = self.canonicalize_instruction_name(insn)
@@ -1056,6 +1069,7 @@ class Cpu(Eventful):
         """
         Notify listeners that an instruction has been executed.
         """
+        self._last_executed_pc = self._last_pc
         self._icount += 1
         self._publish("did_execute_instruction", self._last_pc, self.PC, insn)
 
